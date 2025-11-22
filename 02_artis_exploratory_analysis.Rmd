@@ -1,0 +1,378 @@
+---
+title: "Shark Exploratory Nov 2025"
+author: "Jessica Gephart"
+date: "2025-11-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, 
+                      fig.width = 6, fig.height = 4)
+```
+
+```{r load packages}
+library(data.table)
+library(tidyverse)
+library(exploreARTIS)
+library(ggpubr)
+library(countrycode)
+library(ggrepel)
+```
+
+```{r load data}
+# load ARTIS consumption data filtered to chondrichthyes 
+# (generated in 01_filter_artis)
+consumption <- fread("data/consumption_v2_0_sharks.csv")
+
+# load ARTIS taxa table
+sciname <- read.csv("data/sciname.csv")
+```
+
+
+# ARTIS shark consumption flow data exploration
+
+## Share exported
+```{r}
+# Calculate share exported
+export_share <- consumption %>%
+  mutate(consumption_source = case_when(
+    str_detect(consumption_source, "foreign") ~ "foreign", 
+    TRUE ~ consumption_source
+  )) %>%
+  group_by(year, source_country_iso3c, consumption_source, sciname) %>%
+  summarise(consumption_live_t = sum(consumption_live_t)) %>%
+  group_by(year, source_country_iso3c, sciname) %>%
+  mutate(share = 100*consumption_live_t/sum(consumption_live_t))
+
+
+export_share_all_elasmo <- consumption %>%
+  mutate(consumption_source = case_when(
+    str_detect(consumption_source, "foreign") ~ "foreign", 
+    TRUE ~ consumption_source
+  )) %>%
+  group_by(year, source_country_iso3c, consumption_source) %>%
+  summarise(consumption_live_t = sum(consumption_live_t)) %>%
+  group_by(year, source_country_iso3c) %>%
+  mutate(share = 100*consumption_live_t/sum(consumption_live_t))
+
+```
+
+```{r, fig.height=15}
+export_share_all_elasmo %>%
+  filter(consumption_source == "foreign") %>%
+  mutate(country_name = countrycode(source_country_iso3c, origin = "iso3c", destination = "country.name")) %>%
+  filter(!is.na(country_name)) %>%
+  group_by(country_name) %>%
+  mutate(share_ave = sum(share)/length(1996:2023)) %>%
+  ggplot() +
+  geom_point(aes(x = share, 
+                 y = reorder(country_name, share_ave), 
+                 color = year), alpha = 0.7) +
+  geom_point(aes(x = share_ave, 
+                 y = reorder(country_name, share_ave)), 
+             color = "red") + 
+  labs(y = "", x = "% landings exported") +
+  theme_minimal()
+```
+
+
+```{r}
+export_share_all_elasmo %>%
+  filter(consumption_source == "foreign", 
+         source_country_iso3c %in% c("ECU", "BRA", "SEY", "ESP", "ARG", "IDN",
+                                     "KOR", "CHN", "IND", "TWN")) %>%
+  ggplot(aes(x = year, y = share)) +
+  geom_line() + 
+  facet_wrap(~source_country_iso3c) +
+  theme_minimal()
+
+consumption %>%
+  plot_ts(artis_var = "consumption_source", value = "consumption_live_t", 
+          plot.type = "stacked")
+
+# Key intermediaries
+consumption %>%
+  filter(consumption_source == "foreign step 2") %>%
+  plot_ts(artis_var = "exporter_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked")
+
+consumption %>%
+  filter(consumption_source == "foreign step 2", year == 2023) %>%
+  plot_bar(bar_group = "exporter_iso3c", value = "consumption_live_t")
+```
+
+
+```{r}
+export_share %>%
+  filter(consumption_source == "foreign", 
+         str_detect(sciname, "galeorhinus")) %>%
+  ggplot(aes(x = year, y = share, color = sciname)) +
+  geom_line() + 
+  facet_wrap(~source_country_iso3c) +
+  theme_minimal() 
+
+
+consumption %>%
+  filter(str_detect(consumption_source, "foreign"), 
+         source_country_iso3c %in% c("ARG", "NZL", "ZAF"),
+         str_detect(sciname, "galeorhinus")) %>%
+  plot_ts(artis_var = "consumer_iso3c", value = "consumption_live_t")
+
+
+consumption %>%
+  filter(consumer_iso3c == "AUS",
+         str_detect(sciname, "galeorhinus")) %>%
+  plot_ts(artis_var = "source_country_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked", prop_flow_cutoff = 0.03)
+
+consumption %>%
+  filter(source_country_iso3c == "ARG",
+         str_detect(sciname, "galeorhinus")) %>%
+  plot_ts(artis_var = "consumer_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked", prop_flow_cutoff = 0.01)
+```
+
+```{r}
+# write out data frame for Nick
+focal_years <- 2013:2023
+df_nick <- export_share_all_elasmo %>%
+  filter(consumption_source == "foreign",
+         year %in% focal_years) %>%
+  # calculate average export share
+  group_by(source_country_iso3c) %>%
+  summarise(export_percent_ave = sum(share)/length(focal_years)) %>%
+  left_join(consumption %>%
+              filter(year %in% focal_years) %>%
+              group_by(source_country_iso3c) %>%
+              summarise(landings_quantity_t = sum(consumption_live_t)/length(focal_years)),
+            by = c("source_country_iso3c")) %>%
+  left_join(consumption %>%
+              filter(year %in% focal_years, 
+                     str_detect(consumption_source, "foreign")) %>%
+              group_by(source_country_iso3c) %>%
+              summarise(export_quantity_t = sum(consumption_live_t)/length(focal_years)),
+            by = c("source_country_iso3c"))
+
+# data checks
+df_nick %>%
+  summarise(landings_quantity_t = sum(landings_quantity_t), 
+            export_quantity_t = sum(export_quantity_t))
+
+write.csv(df_nick, "data/elasmo_export_shares.csv", row.names = FALSE) 
+
+```
+
+
+# Skates summary figures
+
+```{r}
+sciname_skates1 <- sciname %>%
+  filter(Order == "rajiformes") %>%
+  pull(sciname)
+
+sciname_skates <- sciname %>%
+  filter(str_detect(common_name, "skate")) %>%
+  pull(sciname)
+
+consumption_skates <- consumption %>%
+  filter(sciname_hs_modified %in% sciname_skates) %>%
+  mutate(consumption_source = case_when(
+    str_detect(consumption_source, "foreign") ~ "foreign",
+    TRUE ~ consumption_source
+  ))
+```
+
+```{r}
+# global skate figures
+consumption_skates %>%
+  plot_ts(artis_var = "consumer_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked", 
+          facet_variable = "consumption_source", facet_values = 3)
+
+
+consumption_skates %>%
+  filter(consumption_source == "foreign") %>%
+  plot_ts(artis_var = "consumer_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked")
+
+consumption_skates %>%
+  plot_ts(artis_var = "consumer_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked")
+
+consumption_skates %>%
+  filter(consumption_source == "foreign", year %in% 2017:2023, 
+         sciname != "rajiformes") %>%
+  plot_sankey(cols = c("sciname_hs_modified", "source_country_iso3c", "consumer_iso3c"), 
+              cols_labels = c("Taxa", "Producer", "Consumer"),
+              value = "consumption_live_t", prop_flow_cutoff = 0.03)
+
+```
+
+
+```{r}
+# explore country patterns
+
+consumption_skates %>% 
+  filter(source_country_iso3c == "ARG") %>%
+    plot_ts(artis_var = "consumer_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked", prop_flow_cutoff = 0.03)
+
+
+consumption %>% 
+  filter(consumer_iso3c == "KOR", str_detect(consumption_source, "foreign")) %>%
+    plot_ts(artis_var = "source_country_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked", prop_flow_cutoff = 0.03)
+
+consumption_skates %>% 
+  filter(consumer_iso3c == "KOR", str_detect(consumption_source, "foreign")) %>%
+    plot_ts(artis_var = "source_country_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked", prop_flow_cutoff = 0.03)
+
+consumption_skates %>% 
+  filter(source_country_iso3c == "KOR") %>%
+    plot_ts(artis_var = "consumer_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked", prop_flow_cutoff = 0.03)
+
+```
+
+
+# Fish and Chips
+
+```{r}
+scinames_fnc <- sciname %>%
+  filter(Genus %in% c("galeorhinus", "squalus", "scyliorhinus", "mustelus")) %>%
+  pull(sciname)
+
+consumption_fnc <- consumption %>%
+  filter(sciname %in% scinames_fnc)
+```
+
+```{r}
+consumption_fnc %>%
+  plot_ts(artis_var = "source_country_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked", y.lab = "Quantity (t, live weight)")
+
+consumption_fnc %>%
+  plot_ts(artis_var = "consumer_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked", y.lab = "Quantity (t, live weight)")
+
+consumption_fnc %>%
+    filter(str_detect(consumption_source, "foreign"), year %in% 2017:2023) %>%
+  plot_sankey(cols = c("sciname_hs_modified", "source_country_iso3c", "consumer_iso3c"), 
+              cols_labels = c("Taxa", "Producer", "Consumer"),
+              value = "consumption_live_t", prop_flow_cutoff = 0.03)
+
+consumption_fnc %>%
+  filter(year == 2023) %>%
+  plot_bar(bar_group = "consumer_iso3c", 
+           fill_type = "consumption_source",
+           value = "consumption_percap_live_kg", 
+           x.lab = "Quantity (kg per cap, live weight)")
+
+
+consumption_fnc %>%
+  filter(consumer_iso3c == "GBR") %>%
+  plot_ts(artis_var = "source_country_iso3c", value = "consumption_live_t",
+          plot.type = "stacked", y.lab = "Quantity (t, live weight)")
+
+consumption_fnc %>%
+  filter(consumer_iso3c == "GBR", str_detect(consumption_source, "foreign")) %>%
+  plot_ts(artis_var = "sciname", value = "consumption_live_t",
+          plot.type = "stacked", prop_flow_cutoff = 0.03, 
+          y.lab = "Quantity (t, live weight)")
+```
+
+# Silky sharks
+
+```{r}
+consumption_silky <- consumption %>%
+  filter(sciname == "carcharhinus falciformis")
+```
+
+```{r}
+consumption_silky %>%
+  plot_ts(artis_var = "source_country_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked", y.lab = "Quantity (t, live weight)", 
+          prop_flow_cutoff = 0.03)
+
+consumption_silky %>%
+  plot_ts(artis_var = "consumer_iso3c", value = "consumption_live_t", 
+          plot.type = "stacked", y.lab = "Quantity (t, live weight)",
+          prop_flow_cutoff = 0.03)
+
+consumption_silky %>%
+    filter(str_detect(consumption_source, "foreign"), year %in% 2017:2023) %>%
+  plot_sankey(cols = c("sciname_hs_modified", "source_country_iso3c", "consumer_iso3c"), 
+              cols_labels = c("Taxa", "Producer", "Consumer"),
+              value = "consumption_live_t", prop_flow_cutoff = 0.03)
+
+consumption_silky %>%
+  filter(year == 2023) %>%
+  plot_bar(bar_group = "consumer_iso3c", 
+           fill_type = "consumption_source",
+           value = "consumption_percap_live_kg", 
+           x.lab = "Quantity (kg per cap, live weight)")
+```
+
+
+```{r}
+compare_elasmo_export_share <- export_share_all_elasmo %>%
+  filter(consumption_source == "foreign") %>%
+  left_join(consumption %>%
+              group_by(year, source_country_iso3c) %>%
+              summarise(landings_quantity_t = sum(consumption_live_t)),
+            by = c("year", "source_country_iso3c")) %>%
+    left_join(consumption %>%
+              filter(str_detect(consumption_source, "foreign")) %>%
+              group_by(year, source_country_iso3c) %>%
+              summarise(export_quantity_t = sum(consumption_live_t)),
+            by = c("year", "source_country_iso3c")) %>%
+  select(-consumption_source, -consumption_live_t) %>%
+  ungroup()
+```
+
+
+```{r}
+
+plot_export_share <- function(focal_country){
+  panel_a <- compare_elasmo_export_share %>%
+  filter(source_country_iso3c == focal_country) %>%
+  ggplot(aes(x = year, y = share)) +
+  geom_line() +
+  lims(y = c(0,100)) +
+  labs(x = "", y = "Export share (%)") +
+  theme_minimal()
+
+panel_b <- compare_elasmo_export_share %>%
+  filter(source_country_iso3c == focal_country) %>%
+  ggplot(aes(x = year, y = landings_quantity_t)) +
+  geom_line() +
+  labs(x = "", y = "Landings (t, live weight)") +
+  theme_minimal()
+
+panel_c <- compare_elasmo_export_share %>%
+  filter(source_country_iso3c == focal_country) %>%
+  ggplot(aes(landings_quantity_t, share)) +
+  geom_point() +
+  geom_smooth() +
+  labs(x = "Landings (t, live weight)", y = "Export share (%)") +
+  theme_minimal()
+
+annotate_figure(ggarrange(ggarrange(panel_a, panel_b, ncol = 1),
+                          panel_c), 
+                focal_country)
+}
+
+plot_export_share("ECU")
+plot_export_share("BRA")
+plot_export_share("SYC")
+plot_export_share("ESP")
+plot_export_share("ARG")
+plot_export_share("IDN")
+plot_export_share("KOR")
+plot_export_share("CHN")
+plot_export_share("IND")
+plot_export_share("TWN")
+
+```
+

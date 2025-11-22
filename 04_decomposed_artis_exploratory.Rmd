@@ -1,0 +1,250 @@
+---
+title: "Explore decomposed ARTIS"
+author: "Jessica Gephart"
+date: "2025-11-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, 
+                      fig.width = 6, fig.height = 4)
+```
+
+```{r load packages}
+library(data.table)
+library(tidyverse)
+library(exploreARTIS)
+library(ggpubr)
+library(countrycode)
+library(ggrepel)
+```
+
+```{r load data}
+consumption_resolved_out <- fread("data/consumption_resolved.csv")
+
+# load Red List status by species data from Nathan
+rl_sp <- read.csv("data/RedList_status_sharks.csv") %>%
+  mutate(species = tolower(species)) %>%
+  mutate(rl_score = case_when(
+    status == "LC" ~ 0,
+    status == "NT" ~ 1,
+    status == "VU" ~ 2,
+    status == "EN" ~ 3,
+    status == "CR" ~ 4)) %>%
+  select(-X)
+```
+
+
+```{r}
+consumption_resolved_out %>%
+  plot_bar(bar_group = "sciname", value = "consumption_live_t",
+           fill_type = "consumption_source", 
+           top_n = 15)
+
+consumption_resolved_out %>%
+  plot_bar(bar_group = "source_country_iso3c", value = "consumption_live_t",
+           fill_type = "consumption_source", 
+           top_n = 25)
+
+consumption_resolved_out %>%
+  plot_bar(bar_group = "source_country_iso3c", value = "consumption_live_t",
+           fill_type = "data_source", 
+           top_n = 25)
+
+consumption %>%
+  plot_bar(bar_group = "source_country_iso3c", value = "consumption_live_t",
+           fill_type = "consumption_source", 
+           top_n = 25)
+
+consumption_resolved_out %>%
+  plot_bar(bar_group = "consumer_iso3c", value = "consumption_live_t",
+           fill_type = "consumption_source", 
+           top_n = 15)
+
+
+consumption_resolved_out %>%
+  filter(consumption_source != "domestic") %>%
+  plot_bar(bar_group = "exporter_iso3c", value = "consumption_live_t",
+           fill_type = "consumption_source", 
+           top_n = 15)
+```
+
+```{r}
+# Case study figures based on disaggregated ARTIS
+## Skates
+sciname_skates <- taxa_add %>%
+  filter(Order == "rajiformes") %>%
+  pull(sciname)
+
+consumption_resolved_out %>%
+  filter(sciname %in% sciname_skates) %>%
+  plot_bar(bar_group = "sciname", value = "consumption_live_t", 
+           fill_type = "consumption_source", 
+           top_n = 20)
+
+consumption_resolved_out %>%
+  filter(sciname %in% sciname_skates) %>%
+  plot_bar(bar_group = "consumer_iso3c", value = "consumption_live_t", 
+           fill_type = "consumption_source", 
+           top_n = 20)
+
+consumption_resolved_out %>%
+  filter(sciname %in% sciname_skates) %>%
+  plot_sankey(cols = c("sciname", "source_country_iso3c", "consumer_iso3c"),
+              cols_labels = c("Species", "Producer", "Consumer"), 
+              value = "consumption_live_t", 
+              prop_flow_cutoff = 0.03)
+
+
+## Fish and chips
+scinames_fnc <- sciname %>%
+  filter(Genus %in% c("galeorhinus", "squalus", "scyliorhinus", "mustelus")) %>%
+  pull(sciname)
+
+consumption_resolved_out %>%
+  filter(sciname %in% scinames_fnc) %>%
+  plot_bar(bar_group = "sciname", value = "consumption_live_t", 
+           fill_type = "consumption_source", 
+           top_n = 20)
+
+consumption_resolved_out %>%
+  filter(sciname %in% scinames_fnc) %>%
+  plot_bar(bar_group = "consumer_iso3c", value = "consumption_live_t", 
+           fill_type = "consumption_source", 
+           top_n = 20)
+
+consumption_resolved_out %>%
+  filter(sciname %in% scinames_fnc) %>%
+  plot_sankey(cols = c("sciname", "source_country_iso3c", "consumer_iso3c"),
+              cols_labels = c("Species", "Producer", "Consumer"), 
+              value = "consumption_live_t", 
+              prop_flow_cutoff = 0.03)
+
+## Silky shark
+scinames_silky <- "carcharhinus falciformis"
+
+consumption_resolved_out %>%
+  filter(sciname %in% scinames_silky) %>%
+  plot_bar(bar_group = "sciname", value = "consumption_live_t", 
+           fill_type = "consumption_source", 
+           top_n = 20)
+
+consumption_resolved_out %>%
+  filter(sciname %in% scinames_silky) %>%
+  plot_bar(bar_group = "consumer_iso3c", value = "consumption_live_t", 
+           fill_type = "consumption_source", 
+           top_n = 20)
+
+consumption_resolved_out %>%
+  filter(sciname %in% scinames_silky) %>%
+  plot_bar(bar_group = "source_country_iso3c", value = "consumption_live_t", 
+           fill_type = "consumption_source", 
+           top_n = 20)
+
+consumption_resolved_out %>%
+  filter(sciname %in% scinames_silky, 
+         consumption_source != "domestic") %>%
+  plot_sankey(cols = c("sciname", "source_country_iso3c", "consumer_iso3c"),
+              cols_labels = c("Species", "Producer", "Consumer"), 
+              value = "consumption_live_t", 
+              prop_flow_cutoff = 0.03)
+
+```
+
+
+
+
+```{r}
+# Summary for model
+nathan_df <- consumption_resolved_out %>%
+  mutate(destination = case_when(
+    consumption_source == "domestic" ~ "retained",
+    str_detect(consumption_source, "foreign") ~ "exported"
+  )) %>%
+  group_by(sciname, destination) %>%
+  summarise(q_live_weight_t = sum(consumption_live_t)) %>%
+  pivot_wider(names_from = destination, values_from = q_live_weight_t,
+              values_fill = 0)
+
+write.csv(nathan_df, "data/shark_sp_retain_export.csv", row.names = FALSE)
+
+write.csv(consumption_resolved_out, "data/consumption_resolved_20251121.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+consumption_resolved_out_rl_producer <- consumption_resolved_out %>%
+  filter(sciname %in% scinames_fnc) %>%
+  # currently 55 species with missing RL category
+  left_join(rl_sp, by = c("sciname" = "species")) %>%
+  filter(!is.na(status)) %>%
+  group_by(source_country_iso3c, rl_score) %>%
+  summarise(consumption_live_t = sum(consumption_live_t)) %>%
+  group_by(source_country_iso3c) %>%
+  mutate(prop = consumption_live_t/sum(consumption_live_t)) %>%
+  summarise(rl_producer_score = sum(prop*rl_score),
+            production_live_t = sum(consumption_live_t))
+
+
+consumption_resolved_out_rl_consumer <- consumption_resolved_out %>%
+  filter(sciname %in% scinames_fnc) %>%
+  # currently 55 species with missing RL category
+  left_join(rl_sp, by = c("sciname" = "species")) %>%
+  filter(!is.na(status)) %>%
+  group_by(consumer_iso3c, rl_score) %>%
+  summarise(consumption_live_t = sum(consumption_live_t)) %>%
+  group_by(consumer_iso3c) %>%
+  mutate(prop = consumption_live_t/sum(consumption_live_t)) %>%
+  summarise(rl_consumer_score = sum(prop*rl_score), 
+            consumption_live_t = sum(consumption_live_t))
+
+consumption_resolved_out_rl_producer %>%
+  full_join(consumption_resolved_out_rl_consumer, 
+            by = c("source_country_iso3c" = "consumer_iso3c")) %>%
+  ggplot(aes(x = rl_producer_score, 
+             y = rl_consumer_score, 
+             size = consumption_live_t, 
+             color = production_live_t,
+             label = source_country_iso3c)) +
+  geom_point() + 
+  geom_abline(slope = 1, intercept = 0) +
+  geom_text_repel() +
+  theme_minimal()
+
+consumption_resolved_out %>%
+  # currently 55 species with missing RL category
+  left_join(rl_sp, by = c("sciname" = "species")) %>%
+  filter(!is.na(status)) %>%
+  mutate(status = factor(status, levels = rev(c("LC", "NT", "VU", "EN", "CR")))) %>%
+  plot_bar(bar_group = "consumer_iso3c", value = "consumption_live_t", 
+           fill_type = "status", top_n = 20)
+
+consumption_resolved_out %>%
+  # currently 55 species with missing RL category
+  left_join(rl_sp, by = c("sciname" = "species")) %>%
+  filter(!is.na(status)) %>%
+  mutate(status = factor(status, levels = rev(c("LC", "NT", "VU", "EN", "CR")))) %>%
+  plot_bar(bar_group = "source_country_iso3c", value = "consumption_live_t", 
+           fill_type = "status", top_n = 20)
+
+
+consumption_resolved_out %>%
+  # currently 55 species with missing RL category
+  left_join(rl_sp, by = c("sciname" = "species")) %>%
+  filter(!is.na(status)) %>%
+  mutate(status = factor(status, levels = rev(c("LC", "NT", "VU", "EN", "CR")))) %>%
+  plot_sankey(cols = c("status", "source_country_iso3c", "consumer_iso3c"), 
+              cols_labels = c("RL Cat", "Source", "Consumer"),
+              value = "consumption_live_t", prop_flow_cutoff = 0.03)
+
+
+consumption_resolved_out %>%
+  # currently 55 species with missing RL category
+  left_join(rl_sp, by = c("sciname" = "species")) %>%
+  filter(!is.na(status), consumption_source != "domestic") %>%
+  mutate(status = factor(status, levels = rev(c("LC", "NT", "VU", "EN", "CR")))) %>%
+  plot_sankey(cols = c("status", "source_country_iso3c", "consumer_iso3c"), 
+              cols_labels = c("RL Cat", "Source", "Consumer"),
+              value = "consumption_live_t", prop_flow_cutoff = 0.03)
+```
