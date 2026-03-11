@@ -4,3 +4,6 @@
 [submodule "Skates"]
 	path = Skates
 	url = https://github.com/NickDulvy/skate-meat-trade
+[submodule "Silky"]
+	path = Silky
+	url = https://github.com/natpac/NCEAS_Silky
