@@ -1,0 +1,3 @@
+[submodule "FishNChips"]
+	path = FishNChips
+	url = https://github.com/creeas/NCEAS-FishNChips
