@@ -1,3 +1,6 @@
 [submodule "FishNChips"]
 	path = FishNChips
 	url = https://github.com/creeas/NCEAS-FishNChips
+[submodule "Skates"]
+	path = Skates
+	url = https://github.com/NickDulvy/skate-meat-trade
