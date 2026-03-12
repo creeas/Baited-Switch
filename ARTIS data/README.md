@@ -2,7 +2,7 @@
 
 
 This dataset represents the outputs of the ARTIS (Aquatic Resource Trade in Species) model, version 2.0. Model outputs include disaggregated aquatic trade and consumption data, formatted for efficient access using the Parquet file format. 
-A filtered dataset containing all shark and ray meat trade flows can be found here: [artis_2.0_sharks](https://www.dropbox.com/scl/fi/3lvqtksotfjj9n5pyv0pw/consumption_v2_0_sharks.csv). This file is large but can be read directly into r using the readr package:
+A filtered dataset containing all shark and ray meat trade flows can be found here: [artis_2.0_sharks]([https://www.dropbox.com/scl/fi/3lvqtksotfjj9n5pyv0pw/consumption_v2_0_sharks.csv](https://www.dropbox.com/scl/fi/3lvqtksotfjj9n5pyv0pw/consumption_v2_0_sharks.csv?rlkey=zwi68qb5voplqh5pun2okh321&st=oa54gne5&dl=1)). This file is large but can be read directly into r using the readr package:
 
 
 ```
