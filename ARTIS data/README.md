@@ -11,6 +11,7 @@ A filtered dataset containing all shark and ray meat trade flows can be found he
 library(readr)
 
 # The modified direct download link
+#NOTE: link must end with dl=1 to enable a direct download and read (default is dl=0)
 artis_url <- "https://www.dropbox.com/scl/fi/3lvqtksotfjj9n5pyv0pw/consumption_v2_0_sharks.csv?rlkey=zwi68qb5voplqh5pun2okh321&st=oa54gne5&dl=1"
 
 # Read the data directly into a data frame
